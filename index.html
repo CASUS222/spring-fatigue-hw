@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spring Fatigue Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+      html,
+      body {
+        background: #fdfbf7;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen text-slate-800">
+    <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <header class="mb-8">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div class="text-sm font-semibold tracking-wide text-slate-600">Spring Fatigue Analysis</div>
+            <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Helical Spring Goodman Fatigue</h1>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Enter spring geometry and cyclic force to compute mean/alternating shear stress, Zimmerli shear endurance
+              limit, and Goodman fatigue safety factor.
+            </p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Model</div>
+            <div class="mt-2 grid gap-1 text-sm text-slate-700">
+              <div class="font-mono">C = D / d</div>
+              <div class="font-mono">K<sub>B</sub> = (4C + 2) / (4C - 3)</div>
+              <div class="font-mono">&tau; = K<sub>B</sub> (8FD / (&pi; d<sup>3</sup>))</div>
+              <div class="font-mono">S<sub>su</sub> = 0.67 S<sub>ut</sub></div>
+              <div class="font-mono">
+                S<sub>se</sub> = S<sub>sa</sub> / (1 - S<sub>sm</sub>/S<sub>su</sub>) (Zimmerli)
+              </div>
+              <div class="font-mono">Util = (&tau;<sub>a</sub>/S<sub>se</sub>) + (&tau;<sub>m</sub>/S<sub>su</sub>)</div>
+              <div class="font-mono">n = 1 / Util</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="grid gap-6 lg:grid-cols-2">
+        <!-- Inputs -->
+        <section class="rounded-2xl border border-slate-200 bg-white/70 p-6 shadow-sm">
+          <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">Inputs</h2>
+            <button
+              id="resetBtn"
+              type="button"
+              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Reset
+            </button>
+          </div>
+
+          <form id="form" class="grid gap-4 sm:grid-cols-2" autocomplete="off" novalidate>
+            <label class="grid gap-1">
+              <span class="text-sm font-semibold text-slate-700">Wire diameter, d (mm)</span>
+              <input
+                id="d"
+                inputmode="decimal"
+                type="number"
+                step="0.01"
+                min="0.01"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-orange-500/40 focus:ring-4"
+                value="8"
+              />
+            </label>
+
+            <label class="grid gap-1">
+              <span class="text-sm font-semibold text-slate-700">Mean coil diameter, D (mm)</span>
+              <input
+                id="D"
+                inputmode="decimal"
+                type="number"
+                step="0.01"
+                min="0.01"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-orange-500/40 focus:ring-4"
+                value="64"
+              />
+            </label>
+
+            <label class="grid gap-1">
+              <span class="text-sm font-semibold text-slate-700">Minimum force, Fmin (N)</span>
+              <input
+                id="Fmin"
+                inputmode="decimal"
+                type="number"
+                step="0.1"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-orange-500/40 focus:ring-4"
+                value="150"
+              />
+            </label>
+
+            <label class="grid gap-1">
+              <span class="text-sm font-semibold text-slate-700">Maximum force, Fmax (N)</span>
+              <input
+                id="Fmax"
+                inputmode="decimal"
+                type="number"
+                step="0.1"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-orange-500/40 focus:ring-4"
+                value="450"
+              />
+            </label>
+
+            <label class="grid gap-1">
+              <span class="text-sm font-semibold text-slate-700">Ultimate tensile strength, Sut (MPa)</span>
+              <input
+                id="Sut"
+                inputmode="decimal"
+                type="number"
+                step="1"
+                min="1"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-orange-500/40 focus:ring-4"
+                value="1650"
+              />
+            </label>
+
+            <label class="grid gap-1">
+              <span class="text-sm font-semibold text-slate-700">Surface</span>
+              <select
+                id="surface"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-orange-500/40 focus:ring-4"
+              >
+                <option value="unpeened" selected>Unpeened</option>
+                <option value="peened">Peened</option>
+              </select>
+            </label>
+          </form>
+
+          <div class="mt-6 rounded-2xl border border-slate-200 bg-[#fffdfa] p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Zimmerli constants (shear)</div>
+                <div id="zimmerliText" class="mt-1 text-sm text-slate-700"></div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Target check</div>
+                <div id="targetBadge" class="mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Results + Charts -->
+        <section class="grid gap-6">
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-900">Results</h2>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2">
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Spring index</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900" id="outC">—</div>
+                <div class="mt-1 text-xs text-slate-500">C = D/d</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Bergstrasser factor</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900" id="outKb">—</div>
+                <div class="mt-1 text-xs text-slate-500">K<sub>B</sub> = (4C+2)/(4C-3)</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Shear endurance limit</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900"><span id="outSse">—</span> <span class="text-base font-semibold text-slate-500">MPa</span></div>
+                <div class="mt-1 text-xs text-slate-500">S<sub>se</sub> (Zimmerli)</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Shear ultimate strength</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900"><span id="outSsu">—</span> <span class="text-base font-semibold text-slate-500">MPa</span></div>
+                <div class="mt-1 text-xs text-slate-500">S<sub>su</sub> = 0.67 S<sub>ut</sub></div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Mean shear stress</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900"><span id="outTauM">—</span> <span class="text-base font-semibold text-slate-500">MPa</span></div>
+                <div class="mt-1 text-xs text-slate-500">&tau;<sub>m</sub> @ Fmean</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Alternating shear stress</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900"><span id="outTauA">—</span> <span class="text-base font-semibold text-slate-500">MPa</span></div>
+                <div class="mt-1 text-xs text-slate-500">&tau;<sub>a</sub> @ Famp</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Goodman utilization</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900" id="outUtil">—</div>
+                <div class="mt-1 text-xs text-slate-500">(&tau;<sub>a</sub>/S<sub>se</sub>)+(&tau;<sub>m</sub>/S<sub>su</sub>)</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Fatigue safety factor</div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900" id="outN">—</div>
+                <div class="mt-1 text-xs text-slate-500">n = 1 / Util</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-6 shadow-sm">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h2 class="text-lg font-semibold text-slate-900">Sinusoidal cyclic loading</h2>
+                <p class="mt-1 text-sm text-slate-600">Force (N) vs. time (s) built from mean force and force amplitude.</p>
+              </div>
+            </div>
+            <div class="mt-4">
+              <canvas id="waveChart" height="140"></canvas>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-6 shadow-sm">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h2 class="text-lg font-semibold text-slate-900">Goodman Diagram</h2>
+                <p class="mt-1 text-sm text-slate-600">
+                  Line from (0, S<sub>se</sub>) to (S<sub>su</sub>, 0) with the design point ( &tau;<sub>m</sub>, &tau;<sub>a</sub> ).
+                </p>
+              </div>
+            </div>
+            <div class="mt-4">
+              <canvas id="goodmanChart" height="160"></canvas>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const ZIMMERLI_SI = {
+        unpeened: { ssa: 241, ssm: 379 },
+        peened: { ssa: 398, ssm: 534 }
+      };
+
+      function clampNumber(x) {
+        return Number.isFinite(x) ? x : NaN;
+      }
+
+      function fmt(x, digits = 2) {
+        if (!Number.isFinite(x)) return "—";
+        return x.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+      }
+
+      function fmtFlex(x, digits = 2) {
+        if (!Number.isFinite(x)) return "—";
+        return x.toLocaleString(undefined, { maximumFractionDigits: digits });
+      }
+
+      function nearlyEqual(a, b, tol = 0.001) {
+        return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tol;
+      }
+
+      function compute({ d, D, Fmin, Fmax, Sut, surface }) {
+        // Inputs expected in: d, D (mm), forces (N), Sut (MPa). Stress results in MPa.
+        const C = D / d;
+        if (!(C > 0.75)) return { error: "Spring index C = D/d must be > 0.75." };
+        const Kb = (4 * C + 2) / (4 * C - 3);
+
+        const Fmean = (Fmin + Fmax) / 2;
+        const Famp = (Fmax - Fmin) / 2;
+
+        const tau = (F) => Kb * (8 * F * D) / (Math.PI * Math.pow(d, 3));
+        const tauMean = tau(Fmean);
+        const tauAlt = tau(Famp);
+
+        const ssu = 0.67 * Sut;
+        const z = ZIMMERLI_SI[surface] ?? ZIMMERLI_SI.unpeened;
+        const denom = 1 - z.ssm / ssu;
+        if (!(denom > 0)) return { error: "Computed Sse is not valid because Ssu must be greater than Zimmerli's Ssm. Increase Sut." };
+        const sse = z.ssa / denom;
+
+        const utilization = tauAlt / sse + tauMean / ssu;
+        const n = utilization > 0 ? 1 / utilization : Infinity;
+
+        return { C, Kb, tauMean, tauAlt, ssu, sse, utilization, n, z };
+      }
+
+      const dom = {
+        d: document.getElementById("d"),
+        D: document.getElementById("D"),
+        Fmin: document.getElementById("Fmin"),
+        Fmax: document.getElementById("Fmax"),
+        Sut: document.getElementById("Sut"),
+        surface: document.getElementById("surface"),
+        resetBtn: document.getElementById("resetBtn"),
+
+        outC: document.getElementById("outC"),
+        outKb: document.getElementById("outKb"),
+        outSse: document.getElementById("outSse"),
+        outSsu: document.getElementById("outSsu"),
+        outTauM: document.getElementById("outTauM"),
+        outTauA: document.getElementById("outTauA"),
+        outUtil: document.getElementById("outUtil"),
+        outN: document.getElementById("outN"),
+        zimmerliText: document.getElementById("zimmerliText"),
+        targetBadge: document.getElementById("targetBadge")
+      };
+
+      function getInputs() {
+        return {
+          d: clampNumber(parseFloat(dom.d.value)),
+          D: clampNumber(parseFloat(dom.D.value)),
+          Fmin: clampNumber(parseFloat(dom.Fmin.value)),
+          Fmax: clampNumber(parseFloat(dom.Fmax.value)),
+          Sut: clampNumber(parseFloat(dom.Sut.value)),
+          surface: dom.surface.value
+        };
+      }
+
+      let waveChart;
+      let goodmanChart;
+
+      function buildCharts() {
+        const waveCtx = document.getElementById("waveChart");
+        const goodmanCtx = document.getElementById("goodmanChart");
+
+        waveChart = new Chart(waveCtx, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Force (N)",
+                data: [],
+                borderColor: "#D97706",
+                backgroundColor: "rgba(217, 119, 6, 0.15)",
+                borderWidth: 3,
+                pointRadius: 0,
+                tension: 0.35,
+                fill: true
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { mode: "index", intersect: false }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: "Time (s)" },
+                grid: { color: "rgba(15, 23, 42, 0.08)" }
+              },
+              y: {
+                title: { display: true, text: "Force (N)" },
+                grid: { color: "rgba(15, 23, 42, 0.08)" }
+              }
+            }
+          }
+        });
+
+        goodmanChart = new Chart(goodmanCtx, {
+          type: "scatter",
+          data: {
+            datasets: [
+              {
+                type: "line",
+                label: "Goodman limit",
+                data: [
+                  { x: 0, y: 0 },
+                  { x: 1, y: 1 }
+                ],
+                parsing: false,
+                borderColor: "#186b69",
+                backgroundColor: "rgba(24, 107, 105, 0.12)",
+                borderWidth: 3,
+                pointRadius: 0,
+                fill: false,
+                tension: 0
+              },
+              {
+                label: "Design point",
+                data: [{ x: 0, y: 0 }],
+                borderColor: "#DC2626",
+                backgroundColor: "#DC2626",
+                pointRadius: 6,
+                pointHoverRadius: 7
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: true }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: "Mean shear stress, τm (MPa)" },
+                grid: { color: "rgba(15, 23, 42, 0.08)" },
+                min: 0
+              },
+              y: {
+                title: { display: true, text: "Alternating shear stress, τa (MPa)" },
+                grid: { color: "rgba(15, 23, 42, 0.08)" },
+                min: 0
+              }
+            }
+          }
+        });
+      }
+
+      function updateCharts(results, inputs) {
+        // Waveform
+        const N = 200;
+        const tMax = 1.0;
+        const t = Array.from({ length: N }, (_, i) => (i * tMax) / (N - 1));
+        const Fmean = (inputs.Fmin + inputs.Fmax) / 2;
+        const Famp = (inputs.Fmax - inputs.Fmin) / 2;
+        const y = t.map((ti) => Fmean + Famp * Math.sin(2 * Math.PI * ti));
+
+        waveChart.data.labels = t.map((ti) => ti.toFixed(3));
+        waveChart.data.datasets[0].data = y;
+        waveChart.update("none");
+
+        // Goodman line and design point
+        const sse = results.sse;
+        const ssu = results.ssu;
+
+        goodmanChart.data.datasets[0].data = [
+          { x: 0, y: sse },
+          { x: ssu, y: 0 }
+        ];
+        goodmanChart.data.datasets[1].data = [{ x: results.tauMean, y: results.tauAlt }];
+
+        const xMax = Math.max(ssu, results.tauMean * 1.2, 1);
+        const yMax = Math.max(sse, results.tauAlt * 1.2, 1);
+        goodmanChart.options.scales.x.max = xMax;
+        goodmanChart.options.scales.y.max = yMax;
+        goodmanChart.update("none");
+      }
+
+      function setBadge(ok, text) {
+        dom.targetBadge.textContent = text;
+        dom.targetBadge.className =
+          "mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold " +
+          (ok ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800");
+      }
+
+      function render() {
+        const inputs = getInputs();
+        const results = compute(inputs);
+
+        if (results.error) {
+          dom.outC.textContent = "—";
+          dom.outKb.textContent = "—";
+          dom.outSse.textContent = "—";
+          dom.outSsu.textContent = "—";
+          dom.outTauM.textContent = "—";
+          dom.outTauA.textContent = "—";
+          dom.outUtil.textContent = "—";
+          dom.outN.textContent = "—";
+          dom.zimmerliText.textContent = results.error;
+          setBadge(false, "Needs valid inputs");
+          return;
+        }
+
+        dom.outC.textContent = fmt(results.C, 2);
+        dom.outKb.textContent = fmt(results.Kb, 3);
+        dom.outSse.textContent = fmt(results.sse, 2);
+        dom.outSsu.textContent = fmt(results.ssu, 2);
+        dom.outTauM.textContent = fmt(results.tauMean, 2);
+        dom.outTauA.textContent = fmt(results.tauAlt, 2);
+        dom.outUtil.textContent = fmtFlex(results.utilization, 3);
+        dom.outN.textContent = fmtFlex(results.n, 2);
+
+        const surfaceLabel = inputs.surface === "peened" ? "Peened" : "Unpeened";
+        dom.zimmerliText.innerHTML = `<span class="font-semibold">${surfaceLabel}</span>: Ssa=${fmtFlex(results.z.ssa, 0)} MPa, Ssm=${fmtFlex(
+          results.z.ssm,
+          0
+        )} MPa`;
+
+        // Target verification
+        const isTarget =
+          nearlyEqual(inputs.d, 8, 1e-9) &&
+          nearlyEqual(inputs.D, 64, 1e-9) &&
+          nearlyEqual(inputs.Fmin, 150, 1e-9) &&
+          nearlyEqual(inputs.Fmax, 450, 1e-9) &&
+          nearlyEqual(inputs.Sut, 1650, 1e-9) &&
+          inputs.surface === "unpeened";
+
+        if (isTarget) {
+          const okUtil = nearlyEqual(results.utilization, 0.254, 0.0005);
+          const okN = nearlyEqual(results.n, 3.94, 0.01);
+          setBadge(okUtil && okN, `Util=${fmtFlex(results.utilization, 3)}; n=${fmtFlex(results.n, 2)}`);
+        } else {
+          setBadge(true, "Live");
+        }
+
+        updateCharts(results, inputs);
+      }
+
+      function wireEvents() {
+        const onAny = () => render();
+        ["input", "change"].forEach((evt) => {
+          dom.d.addEventListener(evt, onAny);
+          dom.D.addEventListener(evt, onAny);
+          dom.Fmin.addEventListener(evt, onAny);
+          dom.Fmax.addEventListener(evt, onAny);
+          dom.Sut.addEventListener(evt, onAny);
+          dom.surface.addEventListener(evt, onAny);
+        });
+
+        dom.resetBtn.addEventListener("click", () => {
+          dom.d.value = "8";
+          dom.D.value = "64";
+          dom.Fmin.value = "150";
+          dom.Fmax.value = "450";
+          dom.Sut.value = "1650";
+          dom.surface.value = "unpeened";
+          render();
+        });
+      }
+
+      buildCharts();
+      wireEvents();
+      render();
+    </script>
+  </body>
+</html>
